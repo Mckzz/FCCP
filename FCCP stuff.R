@@ -23,10 +23,11 @@ print(FCCP_high.pct, n=100)
 str(FCCP_high.pct)
 
 #Change the treatment category treatment to baf
-FCCP_high.pct$treatment[FCCP_high.pct$treatment == 'treatment'] <- 'baf'
+FCCP_high.pct$treatment[FCCP_high.pct$treatment == 'baf'] <- 'FCCP'
 
 print(FCCP_high.pct, n= 48)
 
+#dataframe with only the experimental (non-zero) %changes
 exp <- subset(FCCP_high.pct, exposure == "experimental", 
                       select = c(treatment, antpost, area, indvd, area.pct.change))
 print(exp, n=24)
@@ -98,10 +99,62 @@ exp %>%
   labs(color="Dimension") +
   theme_classic()
 
+########### stats ###########
+
+stats_data <-
+  exp %>%
+    mutate(treatment = as_factor(treatment)) %>%
+    mutate(antpost = as_factor(antpost))
+  
+print(stats_data, n= 24)
 
 
+# doesn't account for random effects
+mod1 <-
+  lm(area.pct.change ~ treatment * indvd, 
+     data = stats_data)
+summary(mod1)
 
 
+####
 
+stats_data$indvd <- as.factor(stats_data$indvd)
 
+mcmod <-
+  MCMCglmm::MCMCglmm(
+    area.pct.change ~ treatment, random = ~indvd,
+    data = stats_data, scale = FALSE,
+    nitt = 1300000, thin = 1000, burnin = 300000, 
+    verbose = FALSE
+  )
 
+summary(mcmod)
+
+print(stats_data)
+
+#Iterations = 300001:1299001
+#Thinning interval  = 1000
+#Sample size  = 1000 
+
+#DIC: 148.5457 
+
+#G-structure:  ~indvd
+
+#post.mean  l-95% CI u-95% CI eff.samp
+#indvd    0.7256 5.968e-17    1.574     1000
+
+#R-structure:  ~units
+
+#           post.mean l-95% CI u-95% CI eff.samp
+#units     26.48    12.82    45.16     1000
+
+#Location effects: area.pct.change ~ treatment 
+
+#                       post.mean l-95% CI u-95% CI eff.samp  pMCMC    
+#(Intercept)            5.757    2.728    8.211     1000 <0.001 ***    ## control
+#  treatmenttreatment   12.750    9.097   16.754     1000 <0.001 ***   ## treatment
+#  ---
+#  Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+## post.mean is the posterior mean (not sac, but a stat thing). it's like an effect size, but is difference from zero. 
+## so subtract control from treatment for effect size of drug
