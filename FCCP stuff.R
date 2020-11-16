@@ -4,6 +4,10 @@ library(tidyr)
 library(dplyr)
 library(ggplot2)
 library(Hmisc)
+install.packages("lmerTest")
+library(lme4)
+
+
 rm(X1uM)
 
 FCCP_high <- as_tibble(X1uM) %>%
@@ -110,11 +114,13 @@ print(stats_data, n= 24)
 
 
 # doesn't account for random effects
-mod1 <-
-  lm(area.pct.change ~ treatment * indvd, 
-     data = stats_data)
-summary(mod1)
+#mod1 <-
+#  lm(area.pct.change ~ treatment * indvd, 
+#     data = stats_data)
+#summary(mod1)
 
+#mod1.aov <- aov(mod1)
+#TukeyHSD(mod1.aov)
 
 ####
 
@@ -127,10 +133,53 @@ mcmod <-
     nitt = 1300000, thin = 1000, burnin = 300000, 
     verbose = FALSE
   )
+# produces a mean for the tratment that is the 
+# difference from the intercept (here, the control), actual mean
+# is ~18.7. this - control mean = ~5.7
+
 
 summary(mcmod)
 
-print(stats_data)
+mean(mcmod$VCV[,1]/(mcmod$VCV[,1] + mcmod$VCV[,2]))
+
+print(stats_data, n= 24)
+
+#trying supressing the intercept
+mcmod.sup <-
+  MCMCglmm::MCMCglmm(
+    area.pct.change ~ treatment-1, random = ~indvd,
+    data = stats_data, scale = FALSE,
+    nitt = 1300000, thin = 1000, burnin = 300000, 
+    verbose = FALSE)
+
+summary(mcmod.sup)
+
+#trying other glms
+
+lmemod <- lmer(area.pct.change ~ treatment, 
+               random = ~ 1|indvd, data = stats_data)
+
+
+
+#### just playing around ####
+# making mean zero control data, but with same spread 
+# by subtracting control mean from all data
+
+stats_data_minmean <- stats_data %>% 
+  mutate(
+    area.pct.change = ((area.pct.change - 5.686)))
+
+print(stats_data_minmean, n=24)
+
+mcmod.minmean <-
+  MCMCglmm::MCMCglmm(
+    area.pct.change ~ treatment, random = ~indvd,
+    data = stats_data_minmean, scale = FALSE,
+    nitt = 1300000, thin = 1000, burnin = 300000, 
+    verbose = FALSE
+  )
+
+summary(mcmod.minmean)
 
 #Iterations = 300001:1299001
 #Thinning interval  = 1000
