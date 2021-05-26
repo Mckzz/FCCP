@@ -1,10 +1,6 @@
 install.packages("tidyverse")
 library(tidyverse)
-library(tidyr)
-library(dplyr)
 library(ggplot2)
-library(Hmisc)
-install.packages("lmerTest")
 library(lme4)
 
 
