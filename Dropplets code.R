@@ -3,108 +3,123 @@ library(tidyverse)
 library(ggplot2)
 library(lme4)
 
-
-rm(X1uM)
-
-FCCP_high <- as_tibble(X1uM) %>%
+dropplets <- as_tibble(X1uM) %>%
   rename(treatment = sac)
 
-print(FCCP_high, n= 50)
+print(dropplets, n= 50)
 
 #making % change column
-FCCP_high.pct <- FCCP_high %>%
-  group_by(treatment, antpost, indvd) %>%
+dropplets.pct <- dropplets %>%
+  group_by(drug, treatment, antpost, indvd) %>%
   mutate(
     area.pct.change = ((area - area[1]) / area[1]
     )*100) %>%
-  ungroup() #why the ungroup?
+  ungroup() #why the ungroup? 
 
-print(FCCP_high.pct, n=100)
-str(FCCP_high.pct)
+print(dropplets.pct, n=100)
+str(dropplets.pct)
 
-#Change the treatment category treatment to baf
-FCCP_high.pct$treatment[FCCP_high.pct$treatment == 'baf'] <- 'FCCP'
+#Change the treatment category treatment to name of what ever drug
+#dropplets.pct$treatment[dropplets.pct$treatment == 'treatment'] <- 'FCCP'
 
-print(FCCP_high.pct, n= 48)
+#print(dropplets.pct, n= 48)
 
-#dataframe with only the experimental (non-zero) %changes
-exp <- subset(FCCP_high.pct, exposure == "experimental", 
-                      select = c(treatment, antpost, area, indvd, area.pct.change))
-print(exp, n=24)
+#dataframe with only the experimental (non-zero) %changes (so can drop exposure column)
+exp <- subset(dropplets.pct, exposure == "experimental", 
+                      select = c(drug, treatment, antpost, area, indvd, area.pct.change))
+print(exp, n=48)
 
-## compute means and sds
-means.sd <-
-  FCCP_high.pct %>% #still has baseline areas
-  select(-indvd) %>% 
-  group_by(exposure, treatment, antpost) %>% 
+#make means of ant and post %changes
+means.antpost <-
+  exp %>% #still has baseline areas
+  select(-antpost) %>% 
+  group_by(drug, treatment, indvd) %>% 
   ## now compute mean and sd:
-  summarize(across(everything(), #how does the across everything work? is it that chr columns get created based on num columns that are summarized?
+  summarize(across(everything(), 
+                   tibble::lst(mean = mean))) %>%
+  mutate(treatment = as.factor(treatment))
+
+print(means.antpost, n= 50)
+
+## compute means and sds (not used for jitter with stat summary)
+means.sd <-
+  means.antpost %>% #still has baseline areas
+  select(-indvd) %>% 
+  group_by(drug, treatment) %>% 
+  ## now compute mean and sd:
+  summarize(across(everything(), 
                    tibble::lst(mean = mean, sd = sd)))
 
 print(means.sd, n= 50)
 
 #take only esperimental means/ sd 
-exp.mean.sd <- subset(means.sd, exposure == "experimental", 
-              select = c(treatment, antpost, area_mean, area_sd, area.pct.change_mean, area.pct.change_sd))
+##exp.mean.sd <- subset(means.sd, exposure == "experimental", 
+  ##            select = c(treatment, antpost, area_mean, area_sd, area.pct.change_mean, area.pct.change_sd))
 
-print(exp.mean.sd, n=24)
+##print(exp.mean.sd, n=24)
 
 
 
 ### plotting ###
 # makes strip charts with mean and stdv
-ggplot(exp, aes(y = area.pct.change, x = treatment, colour= antpost)) +
-  geom_jitter(size = 2, pch = 1, position = position_dodge(width = 0.7)) +
+ggplot(means.antpost, 
+       aes(y = area.pct.change_mean, 
+           x = drug, colour= treatment)) +
+  geom_jitter(size = 2, 
+              pch = 1, 
+              position = position_dodge(width = 0.7)) +
   labs(x = "treatment", y = "% change") + #labels axes
   stat_summary(
-    fun.data = mean_sdl, position = position_dodge(width = 0.5), geom = "errorbar", width = 0.1, fun.args = list(mult=1)) +
+    fun.data = mean_sdl, 
+    position = position_dodge(width = 0.5), 
+    geom = "errorbar", 
+    width = 0.1, 
+    fun.args = list(mult=1)) +
   stat_summary(
-    fun = mean, geom = "point", position = position_dodge(width = 0.5),
+    fun = mean, 
+    geom = "point", 
+    position = position_dodge(width = 0.5),
     size = 3) +
-  theme_classic()   #takes out background
+  theme_classic() + #takes out background
+  theme(legend.position = "none")
 
-#not quite working with trying to offset the anteriors and posteriors. tried dodge and nudge 
-exp %>%
-  ggplot(aes(x= treatment)) +
-  geom_point(position = position_jitter(width = 0.03),
-             pch= 1,  
-             aes(y = area.pct.change, 
-                 group= antpost, 
-                 colour = antpost,)) 
 
-  geom_point(position = position_jitter(width = 0.03), 
-             pch= 1, colour = "red", 
-             aes(y = area, group = larva)) +
-  geom_line(data = means, size= 1, color= "red", 
-            aes(pH, area_mean)) +
-  geom_line(data = means, size= 1, color= "blue", 
-            aes(pH, width_mean)) +
-  geom_point(data = means, pch= 19, color= "red", size= 4, 
-             aes(pH, area_mean)) +
-  geom_point(data = means, pch= 19, color= "blue", size= 4, 
-             aes(pH, width_mean)) +
-  geom_errorbar(data = means, 
-                mapping = aes(x = pH,
-                              ymin = area_mean - area_sd,
-                              ymax = area_mean + area_sd), 
-                width = 0.05,
-                size = 0.75) +
-  geom_errorbar(data = means, 
-                mapping = aes(x = pH,
-                              ymin = width_mean - width_sd,
-                              ymax = width_mean + width_sd), 
-                width = 0.05,
-                size = 0.75) +
-  labs(x = "pH", y = "% change") +
-  labs(color="Dimension") +
+
+
+
+
+
+#not quite working (using self calculated means and SD) with trying to offset the anteriors and posteriors. tried dodge and nudge 
+
+ggplot(means.antpost, aes(y = area.pct.change_mean, x = treatment, colour= treatment)) +
+  geom_jitter(size = 2, 
+              pch = 1, 
+              position = position_dodge(width = 0.7)) +
+  geom_point(data= means.sd, 
+             aes(y = area.pct.change_mean_mean, 
+                 x = treatment, 
+                 colour= treatment)) +
+  geom_errorbar(data= means.sd,
+                aes(x= treatment, 
+                    ymin= area.pct.change_mean_mean - area.pct.change_mean_sd, 
+                    ymax= area.pct.change_mean_mean + area.pct.change_mean_sd), 
+                group= "treatment",
+                width= 2) +
   theme_classic()
+
+
+
+
+
 
 ########### stats ###########
 
-stats_data <-
-  exp %>%
-    mutate(treatment = as_factor(treatment)) %>%
-    mutate(antpost = as_factor(antpost))
+stats_data <- 
+  exp %>% 
+  mutate(treatment = as_factor(treatment)) %>% 
+  mutate(antpost = as_factor(antpost)) %>%
+  mutate(indvd = as_factor(indvd))
+  
   
 print(stats_data, n= 24)
 
@@ -119,8 +134,6 @@ print(stats_data, n= 24)
 #TukeyHSD(mod1.aov)
 
 ####
-
-stats_data$indvd <- as.factor(stats_data$indvd)
 
 mcmod <-
   MCMCglmm::MCMCglmm(
@@ -139,6 +152,10 @@ summary(mcmod)
 mean(mcmod$VCV[,1]/(mcmod$VCV[,1] + mcmod$VCV[,2]))
 
 print(stats_data, n= 24)
+
+stats_data <- stats_data %>%
+  group_by(treatment) %>%
+  sd(area.pct.change)
 
 #trying supressing the intercept
 mcmod.sup <-
